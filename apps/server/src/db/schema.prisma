@@ -1,0 +1,341 @@
+// JanSetu AI - Prisma Database Schema with PostGIS support
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CITIZEN
+  DISTRICT_OFFICER
+  STATE_OFFICER
+  NATIONAL_OFFICER
+  ANALYST
+  ADMIN
+}
+
+enum RequestCategory {
+  ROAD
+  HEALTHCARE
+  EDUCATION
+  WATER
+  SANITATION
+  ELECTRICITY
+  PUBLIC_TRANSPORT
+  DIGITAL_CONNECTIVITY
+  HOUSING
+  AGRICULTURE
+  DISASTER_RESILIENCE
+  PUBLIC_SAFETY
+  OTHER
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RequestStatus {
+  SUBMITTED
+  AI_VERIFIED
+  UNDER_REVIEW
+  ASSIGNED
+  ACTION_PLANNED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+enum InfrastructureType {
+  HOSPITAL
+  CLINIC
+  SCHOOL
+  ROAD
+  WATER_FACILITY
+  ELECTRICITY_FACILITY
+  PUBLIC_TRANSPORT
+  INTERNET_FACILITY
+  SANITATION_FACILITY
+  OTHER
+}
+
+enum RecommendationStatus {
+  PROPOSED
+  UNDER_REVIEW
+  APPROVED_FOR_PLANNING
+  REJECTED
+  MORE_DATA_REQUESTED
+}
+
+model User {
+  id                String          @id @default(uuid())
+  name              String
+  phone             String?         @unique
+  email             String?         @unique
+  passwordHash      String
+  role              Role            @default(CITIZEN)
+  preferredLanguage String          @default("hi")
+  district          String?
+  state             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  requests          CitizenRequest[]
+  feedback          Feedback[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  @@index([role])
+  @@index([state, district])
+}
+
+model CitizenRequest {
+  id             String                @id @default(uuid())
+  citizenId      String
+  citizen        User                  @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  originalText   String
+  translatedText String?
+  language       String                @default("hi")
+  category       RequestCategory
+  subcategory    String?
+  urgency        UrgencyLevel          @default(MEDIUM)
+  status         RequestStatus         @default(SUBMITTED)
+  latitude       Float
+  longitude      Float
+  state          String
+  district       String
+  block          String?
+  village        String?
+  aiConfidence   Float                 @default(0.85)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  media          RequestMedia[]
+  analysis       RequestAnalysis?
+  statusHistory  RequestStatusHistory[]
+  feedback       Feedback[]
+
+  @@index([category])
+  @@index([status])
+  @@index([urgency])
+  @@index([state, district])
+  @@index([createdAt])
+  @@index([citizenId])
+}
+
+model RequestMedia {
+  id        String         @id @default(uuid())
+  requestId String
+  request   CitizenRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  type      String         // image, audio, video
+  url       String
+  mimeType  String
+  createdAt DateTime       @default(now())
+
+  @@index([requestId])
+}
+
+model RequestAnalysis {
+  id                         String         @id @default(uuid())
+  requestId                  String         @unique
+  request                    CitizenRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  detectedProblem            String
+  primaryCategory            RequestCategory
+  secondaryCategory          String?
+  urgencyReason              String
+  affectedPopulationEstimate Int            @default(0)
+  duplicateGroupId           String?
+  aiConfidence               Float          @default(0.9)
+  reasoningSummary           String
+  createdAt                  DateTime       @default(now())
+}
+
+model RequestStatusHistory {
+  id        String         @id @default(uuid())
+  requestId String
+  request   CitizenRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  status    RequestStatus
+  comment   String?
+  updatedBy String
+  createdAt DateTime       @default(now())
+
+  @@index([requestId])
+}
+
+model InfrastructureAsset {
+  id        String             @id @default(uuid())
+  name      String
+  type      InfrastructureType
+  latitude  Float
+  longitude Float
+  state     String
+  district  String
+  block     String?
+  capacity  String?
+  status    String             @default("OPERATIONAL")
+  source    String             @default("State Open Data Portal")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([type])
+  @@index([state, district])
+}
+
+model DemographicData {
+  id         String   @id @default(uuid())
+  location   String
+  state      String
+  district   String
+  block      String?
+  village    String?
+  population Int
+  households Int
+  density    Float
+  source     String   @default("Census & Local Survey")
+  year       Int      @default(2024)
+
+  @@index([state, district])
+}
+
+model InvestmentProject {
+  id                 String   @id @default(uuid())
+  name               String
+  category           String
+  description        String
+  location           String
+  state              String
+  district           String
+  budget             Float    // In Crores INR
+  status             String   // PLANNING, SANCTIONED, ONGOING, COMPLETED
+  startDate          DateTime
+  expectedCompletion DateTime
+  source             String   @default("Ministry Public Works Portal")
+
+  @@index([state, district])
+  @@index([category])
+}
+
+model InfrastructureGap {
+  id                 String          @id @default(uuid())
+  location           String
+  category           RequestCategory
+  gapScore           Float           // 0 to 100
+  evidence           String
+  affectedPopulation Int
+  createdAt          DateTime        @default(now())
+
+  @@index([category])
+}
+
+model Hotspot {
+  id                 String          @id @default(uuid())
+  name               String
+  location           String
+  latitude           Float
+  longitude          Float
+  state              String
+  district           String
+  category           RequestCategory
+  requestCount       Int
+  populationAffected Int
+  gapScore           Float           // 0 to 100
+  urgencyScore       Float           // 0 to 100
+  priorityScore      Float           // 0 to 100
+  confidence         Float           // 0 to 1
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([category])
+  @@index([state, district])
+  @@index([priorityScore])
+}
+
+model AIRecommendation {
+  id                 String               @id @default(uuid())
+  title              String
+  description        String
+  category           RequestCategory
+  location           String
+  state              String
+  district           String
+  latitude           Float
+  longitude          Float
+  priorityScore      Float                // 0 to 100
+  confidence         Float                // 0 to 1
+  affectedPopulation Int
+  evidence           String               // Detailed evidence breakdown
+  estimatedImpact    String
+  limitations        String
+  status             RecommendationStatus @default(PROPOSED)
+  createdAt          DateTime             @default(now())
+
+  projects           Project[]
+
+  @@index([category])
+  @@index([state, district])
+  @@index([status])
+}
+
+model Project {
+  id               String            @id @default(uuid())
+  recommendationId String?
+  recommendation   AIRecommendation? @relation(fields: [recommendationId], references: [id])
+  name             String
+  description      String
+  location         String
+  category         RequestCategory
+  budget           Float             // In Crores
+  status           String            @default("APPROVED_FOR_TENDER")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([category])
+}
+
+model Feedback {
+  id        String         @id @default(uuid())
+  requestId String
+  request   CitizenRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  citizenId String
+  citizen   User           @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+  rating    Int            // 1 to 5
+  comment   String?
+  createdAt DateTime       @default(now())
+
+  @@index([requestId])
+  @@index([citizenId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

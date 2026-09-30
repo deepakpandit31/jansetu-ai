@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # JanSetu Stateless API Server Instance 1
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jansetu-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://jansetu:jansetu_secret@postgres:5432/jansetu_db
+      - REDIS_URL=redis://redis:6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-jansetu-jwt-secret-key-prod}
+      - ENABLE_ASYNC_AI=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Dedicated Asynchronous Worker Container
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jansetu-worker
+    restart: unless-stopped
+    command: ["npx", "tsx", "server.ts"]
+    environment:
+      - NODE_ENV=production
+      - IS_DEDICATED_WORKER=true
+      - DATABASE_URL=postgresql://jansetu:jansetu_secret@postgres:5432/jansetu_db
+      - REDIS_URL=redis://redis:6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_WORKER_CONCURRENCY=15
+    depends_on:
+      - postgres
+      - redis
+
+  # PostgreSQL + PostGIS Spatial Database
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: jansetu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jansetu
+      POSTGRES_PASSWORD: jansetu_secret
+      POSTGRES_DB: jansetu_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jansetu -d jansetu_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cluster / In-Memory Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: jansetu-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

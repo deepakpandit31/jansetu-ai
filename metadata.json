@@ -1,0 +1,6 @@
+{
+  "name": "JanSetu AI - Citizen-to-Government Infrastructure Intelligence",
+  "description": "A Digital Public Good converting citizen voice, text, and multimodal feedback into evidence-backed infrastructure priorities, demand hotspots, explainable AI recommendations, and what-if simulation.",
+  "requestFramePermissions": ["geolocation", "microphone", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
